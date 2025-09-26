@@ -1,5 +1,9 @@
-from dotenv import load_dotenv
+# 1. Standard library
+import sys, re, os, pyfiglet
 from datetime import datetime
+
+# 2. Third-party libraries
+from dotenv import load_dotenv
 from crewai import Crew, LLM, Task, Agent
 from langchain_openai import ChatOpenAI
 from termcolor import colored
@@ -7,12 +11,12 @@ from prompt_toolkit import prompt
 from prompt_toolkit.completion import PathCompleter
 from crewai_tools import SerperDevTool, ScrapeWebsiteTool
 
-import sys, re, os, pyfiglet
-
 def clear_terminal():
+    """Clear the terminal screen"""
     os.system("cls" if os.name == "nt" else "clear")
 
 def display_banner():
+    """Display DorkAgent ASCII banner and version information"""
     print(" ")
     print(" ")
     ascii_banner = pyfiglet.figlet_format("Dork Agent", font="big")
@@ -24,6 +28,7 @@ def display_banner():
     print("=" * 90)
 
 def verify_api_key(llm_type):
+    """Verify required API keys are present in environment"""
     required_keys = ["SERPER_API_KEY"]
 
     if llm_type == "openai":
@@ -44,44 +49,47 @@ def verify_api_key(llm_type):
         sys.exit(1)
 
 def select_llm():
-    ClaudeHaiku = LLM(
+    """Prompt user to select LLM provider and return configured instance"""
+    claude_haiku = LLM(
         api_key=os.getenv('ANTHROPIC_API_KEY'),
         model='anthropic/claude-3-5-haiku-20241022',
     )
 
-    GPT4oMini = ChatOpenAI(
-        model_name="gpt-4o-mini-2024-07-18", 
+    gpt4o_mini = ChatOpenAI(
+        model_name="gpt-4o-mini-2024-07-18",
         temperature=0
     )
 
-    GeminiFlash = LLM(
+    gemini_flash = LLM(
         api_key=os.getenv('GEMINI_API_KEY'),
         model='gemini/gemini-2.0-flash',
     )
-    
+
     while True:
         print("\n")
         print("1. GPT-4o Mini")
         print("2. Claude 3.5 Haiku")
         print("3. Gemini 2.0 Flash")
         print("\n")
-        
+
         choice = input("[?] Choose LLM for Agents (1 - 3): ").strip()
-        
+
         if choice == "1":
-            return GPT4oMini, "openai"
+            return gpt4o_mini, "openai"
         elif choice == "2":
-            return ClaudeHaiku, "anthropic"
+            return claude_haiku, "anthropic"
         elif choice == "3":
-            return GeminiFlash, "gemini"
+            return gemini_flash, "gemini"
         else:
             print("❌ Invalid choice. Please enter 1 - 3.")
 
 def get_file_path(prompt_text):
+    """Get file path from user with auto-completion support"""
     completer = PathCompleter()
     return prompt(prompt_text, completer=completer).strip()
 
 def get_target_domains():
+    """Get target domains from user input or file"""
     target_domains = []
 
     while True:
@@ -114,6 +122,7 @@ def get_target_domains():
     return target_domains
 
 def select_depth():
+    """Prompt user to select search depth for Google Dorking"""
     while True:
         print("\n")
         print("1] target.com")
@@ -127,7 +136,8 @@ def select_depth():
         else:
             print("❌ Invalid choice. Please enter 1 - 3.")
 
-def integrate_notify(): 
+def integrate_notify():
+    """Prompt user to enable Telegram notification via notify tool"""
     while True: 
         print("\n") 
         print("\n") 
@@ -141,6 +151,7 @@ def integrate_notify():
             print("❌ Invalid choice. Please enter Y or N")
 
 def adjust_depth(target_domains, depth):
+    """Adjust domain search depth based on specified depth level"""
     try:
         depth = int(depth)  
         if depth < 1:  
@@ -158,24 +169,21 @@ def adjust_depth(target_domains, depth):
     return adjusted_domains
 
 def sanitize_filename(domain_name):
-
-    # '*' -> 'wildcard'
+    """Remove characters invalid for filenames"""
     sanitized = domain_name.replace('*', 'wildcard')
     sanitized = re.sub(r'[\\/*?:"<>|]', '', sanitized)
     
     return sanitized
 
 def agents(llm):
-
+    """Create CrewAI agents for Google Dorking operations"""
     searcher = Agent(
         role="searcher",
         goal="Performing advanced Google searches using Google Dorks",
         backstory="An expert in Google Dorking techniques for information gathering",
         verbose=True,
-        allow_delegation=False,
         tools=[SerperDevTool()],
         llm=llm,
-        respect_context_window=True,
     )
 
     bughunter = Agent(
@@ -183,10 +191,8 @@ def agents(llm):
         goal="Identifying attack surfaces and vulnerabilities in target domains",
         backstory="A skilled penetration tester specializing in web security and vulnerability assessments",
         verbose=True,
-        allow_delegation=False,
         tools=[ScrapeWebsiteTool()],
         llm=llm,
-        respect_context_window=True,
     )
 
     writer = Agent(
@@ -194,15 +200,13 @@ def agents(llm):
         goal="Generating well-structured and detailed reports based on findings",
         backstory="A technical writer specializing in cybersecurity documentation and structured reporting",
         verbose=True,
-        allow_delegation=False,
         llm=llm,
-        respect_context_window=True,
     )
 
     return [searcher, bughunter, writer]
 
 def task(target_domain, domain, agents):
-       
+    """Define Google Dork search and analysis tasks"""
     task1 = Task(
         description=f"""
         # Google Dorking Search Analysis

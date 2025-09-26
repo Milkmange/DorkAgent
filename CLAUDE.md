@@ -22,7 +22,7 @@ The codebase consists of two main entry points:
 1. **LLM Integration**: Supports OpenAI GPT-4o-mini, Anthropic Claude 3.5 Haiku, and Google Gemini 2.0 Flash
 2. **CrewAI Agents**:
    - `searcher`: Executes Google Dork queries using SerperDevTool
-   - `bughunter`: Analyzes results for vulnerabilities using ScrapeWebsiteTool  
+   - `bughunter`: Analyzes results for vulnerabilities using ScrapeWebsiteTool
    - `writer`: Generates security reports
 3. **Search Depth**: Supports 1-3 levels (domain.com, *.domain.com, *.*.domain.com)
 4. **Notification**: Integration with `notify` tool for Telegram reporting
@@ -41,7 +41,7 @@ The tool executes 30 predefined Google Dork queries targeting:
 **Information Disclosure Discovery:**
 - Sensitive file exposure (.env, config files, backups, logs)
 - Directory listings and exposed source code
-- API endpoints and authentication tokens  
+- API endpoints and authentication tokens
 - Database dumps and private documents
 - Cloud storage misconfigurations (AWS S3, Azure Blob, GCP)
 - PII exposure (employee data, credentials, keys)
@@ -109,7 +109,7 @@ Reports are saved to `./log/YYMMDD/` with format:
 
 **Attack Vector Identification:**
 - Find URLs with parameters suitable for manual XSS/SQLi testing
-- Discover file inclusion opportunities for LFI/RFI testing  
+- Discover file inclusion opportunities for LFI/RFI testing
 - Locate redirect parameters for open redirect testing
 - Identify admin panels for authorization bypass testing
 

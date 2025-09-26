@@ -16,6 +16,7 @@ from crewai_tools import SerperDevTool, ScrapeWebsiteTool
 
 
 def display_banner():
+    """Display DorkAgent ASCII banner and version information"""
     print(" ")
     print(" ")
     ascii_banner = pyfiglet.figlet_format("Dork Agent", font="big")
@@ -28,6 +29,7 @@ def display_banner():
 
 
 def verify_api_key(llm_type):
+    """Verify required API keys are present in environment"""
     required_keys = ["SERPER_API_KEY"]
 
     if llm_type == "gpt":
@@ -49,6 +51,7 @@ def verify_api_key(llm_type):
 
 
 def get_llm(llm_type):
+    """Return configured LLM instance based on type"""
     if llm_type == "gpt":
         return ChatOpenAI(
             model_name="gpt-4o-mini-2024-07-18", 
@@ -70,6 +73,7 @@ def get_llm(llm_type):
 
 
 def load_targets(target_input):
+    """Load target domains from file or single input"""
     targets = []
     
     if os.path.isfile(target_input):
@@ -92,6 +96,7 @@ def load_targets(target_input):
 
 
 def adjust_depth(target_domains, depth):
+    """Adjust domain search depth based on specified depth level"""
     try:
         depth = int(depth)  
         if depth < 1 or depth > 3:  
@@ -110,12 +115,14 @@ def adjust_depth(target_domains, depth):
 
 
 def sanitize_filename(domain_name):
+    """Remove characters invalid for filenames"""
     sanitized = domain_name.replace('*', 'wildcard')
     sanitized = re.sub(r'[\\/*?:"<>|]', '', sanitized)
     return sanitized
 
 
 def agents(llm):
+    """Create CrewAI agents for Google Dorking operations"""
     searcher = Agent(
         role="searcher",
         goal="Performing advanced Google searches using Google Dorks",
@@ -152,7 +159,7 @@ def agents(llm):
 
 
 def task(target_domain, domain, agents):
-    
+    """Define Google Dork search and analysis tasks"""
     task1 = Task(
         description=f"""
         # Google Dorking Search Analysis
@@ -616,6 +623,7 @@ def task(target_domain, domain, agents):
 
 
 def send_notification(report_path):
+    """Send report notification via notify tool"""
     try:
         cmd = f'notify -bulk -p telegram -i "{report_path}"'
         result = os.system(cmd)
@@ -628,6 +636,7 @@ def send_notification(report_path):
 
 
 def run_dorking_analysis(args, domains, target_domains):
+    """Execute Google Dorking analysis on target domains"""
     llm = get_llm(args.llm_type)
     agent_list = agents(llm)
     
@@ -693,6 +702,7 @@ def run_dorking_analysis(args, domains, target_domains):
 
 
 def schedule_job(args, domains, target_domains):
+    """Schedule periodic dorking analysis for VPS mode"""
     print(f"\nScheduled job started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     run_dorking_analysis(args, domains, target_domains)
     print(f"Scheduled job completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -701,6 +711,7 @@ def schedule_job(args, domains, target_domains):
 
 
 def parse_arguments():
+    """Parse command-line arguments"""
     parser = argparse.ArgumentParser(
         description="DorkAgent - LLM-powered Google Dorking tool for bug hunting & pentesting",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -748,6 +759,7 @@ Examples:
 
 
 def main():
+    """Main entry point for CLI execution"""
     args = parse_arguments()
     
     display_banner()
