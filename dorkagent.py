@@ -1,5 +1,5 @@
-# 1. Standard library
-import sys, re, os, pyfiglet
+# Standard library
+import sys, os, subprocess, getpass
 from datetime import datetime
 
 # Third-party
@@ -25,7 +25,6 @@ REQUIRED_PACKAGES = {
     "termcolor": "termcolor",
     "prompt-toolkit": "prompt_toolkit",
     "pyfiglet": "pyfiglet",
-    "schedule": "schedule",
 }
 
 def warn_python_version():
@@ -48,52 +47,30 @@ def pip_install(spec: str):
         print(f"[!] Failed to install {spec}: {e}")
         raise
 
-def ensure_packages():
-    """Ensure required third-party packages are available."""
-
-    missing = []
-
-    for pip_name, import_name in REQUIRED_PACKAGES.items():
-        try:
-            importlib.import_module(import_name)
-        except Exception:
-            missing.append(pip_name)
-
-    req_file = os.path.join(os.path.dirname(__file__), "requirements.txt")
-
-    if missing and os.path.isfile(req_file):
-        try:
-            print(f"[+] Syncing dependencies from requirements.txt ...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_file, "--upgrade", "--upgrade-strategy", "only-if-needed"])
-            missing = []  # reset and re-evaluate
-
-            for pip_name, import_name in REQUIRED_PACKAGES.items():
-                importlib.import_module(import_name)
-            return
-        except Exception as e:
-            print(f"[!] Failed to install from requirements.txt: {e}. Falling back to per-package installs.")
-
-    # Install any still-missing packages individually
-    for pip_name in missing:
-        pip_install(pip_name)
-
-    # Final import verification
-    for _, import_name in REQUIRED_PACKAGES.items():
-        importlib.import_module(import_name)
-
 # Execute checks before importing third-party modules
 warn_python_version()
-ensure_packages()
 
+# Auto-install missing packages if import failed
 if THIRD_PARTY_IMPORT_ERROR:
-    import pyfiglet
-    from crewai import Crew, LLM, Task, Agent
-    from crewai_tools import SerperDevTool, ScrapeWebsiteTool
-    from dotenv import load_dotenv
-    from langchain_openai import ChatOpenAI
-    from prompt_toolkit import prompt
-    from prompt_toolkit.completion import PathCompleter
-    from termcolor import colored
+    print("[!] Missing required packages. Installing automatically...")
+    for package_name, import_name in REQUIRED_PACKAGES.items():
+        try:
+            __import__(import_name)
+        except ImportError:
+            pip_install(package_name)
+
+    print("[+] Package installation complete. Please restart the program.")
+    sys.exit(0)
+
+# Import after packages are ensured
+import pyfiglet
+from crewai import Crew, LLM, Task, Agent
+from crewai_tools import SerperDevTool, ScrapeWebsiteTool
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from prompt_toolkit import prompt
+from prompt_toolkit.completion import PathCompleter
+from termcolor import colored
 
 load_dotenv()
 
@@ -157,7 +134,6 @@ def ensure_api_keys(llm_type: str):
         # Reload environment so subsequent code can read keys
         load_dotenv(dotenv_path=ENV_PATH, override=True)
 
-
 def clear_terminal():
     """Clear the terminal screen."""
 
@@ -175,7 +151,6 @@ def display_banner():
     print("DorkAgent is a LLM-powered agent for automated Google Dorking in bug hunting & pentesting.")
     print(colored("[Ver]", "red") + " Current DorkAgent version is v1.3")
     print("=" * 90)
-
 
 def verify_api_key(llm_type: str):
     """Verify required API keys are set."""
@@ -199,28 +174,12 @@ def verify_api_key(llm_type: str):
         print("\nPlease check your .env file and set the missing keys.")
         sys.exit(1)
 
-
-def select_llm():
-    """Select and configure the LLM for agents."""
-
-    claude_haiku = LLM(
-        api_key=os.getenv('ANTHROPIC_API_KEY'),
-        model='anthropic/claude-3-5-haiku-20241022',
-    )
-
-    gpt4o_mini = ChatOpenAI(
-        model_name="gpt-4o-mini-2024-07-18",
-        temperature=0
-    )
-
-    gemini_flash = LLM(
-        api_key=os.getenv('GEMINI_API_KEY'),
-        model='gemini/gemini-2.0-flash',
-    )
+def select_llm_type():
+    """Select LLM type for agents."""
 
     while True:
         print("\n")
-        print("1. GPT-4o Mini")
+        print("1. GPT-4.1 Mini")
         print("2. Claude 3.5 Haiku")
         print("3. Gemini 2.0 Flash")
         print("\n")
@@ -228,24 +187,39 @@ def select_llm():
         choice = input("[?] Choose LLM for Agents (1 - 3): ").strip()
 
         if choice == "1":
-            return gpt4o_mini, "openai"
+            return "openai"
         elif choice == "2":
-            return claude_haiku, "anthropic"
+            return "anthropic"
         elif choice == "3":
-            return gemini_flash, "gemini"
+            return "gemini"
         else:
             print("[!] Invalid choice. Please enter 1 - 3.")
 
+def create_llm(llm_type):
+    """Create LLM instance based on type."""
+
+    if llm_type == "openai":
+        return ChatOpenAI(
+            model_name="gpt-4.1-mini-2025-04-14",
+        )
+    elif llm_type == "anthropic":
+        return LLM(
+            api_key=os.getenv('ANTHROPIC_API_KEY'),
+            model='anthropic/claude-3-5-haiku-20241022',
+        )
+    elif llm_type == "gemini":
+        return LLM(
+            api_key=os.getenv('GEMINI_API_KEY'),
+            model='gemini/gemini-2.5-flash',
+        )
+    else:
+        raise ValueError(f"Unknown LLM type: {llm_type}")
 
 def get_file_path(prompt_text: str) -> str:
     """Get file path with autocomplete support."""
 
     completer = PathCompleter()
     return prompt(prompt_text, completer=completer).strip()
-
-
-def get_target_domains() -> list:
-    """Get target domains from user input."""
 
 def get_target_domains():
     """Get target domains from user input or file"""
@@ -334,6 +308,8 @@ def adjust_depth(target_domains: list, depth: str) -> list:
 
 def sanitize_filename(domain_name: str) -> str:
     """Sanitize domain name for safe file paths."""
+
+    import re
 
     sanitized = domain_name.replace('*', 'wildcard')
     sanitized = re.sub(r'[\\/*?:"<>|]', '', sanitized)
@@ -848,13 +824,18 @@ if __name__ == "__main__":
     clear_terminal()
     display_banner()
 
-    # Select LLM
-    llm, llm_type = select_llm()
-    agents = agents(llm)
+    # Select LLM type
+    llm_type = select_llm_type()
 
-    # API key verification
+    # API key verification and creation if needed
     load_dotenv()
-    verify_api_key(llm_type)
+    ensure_api_keys(llm_type)
+
+    # Create LLM instance after API keys are ready
+    llm = create_llm(llm_type)
+
+    # Create agents after ensuring API keys
+    agents = agents(llm)
 
     # Get domain(s)
     clear_terminal()
