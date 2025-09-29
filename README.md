@@ -60,6 +60,7 @@ def _make_api_request(self, search_query: str, search_type: str) -> dict:
 
 
 ## Update Log
+- **2025-09-29**: Major code refactoring for improved maintainability (@wjdrud2532 PR #3). Split monolithic 800+ line file into modular architecture (config.py, agents.py, tasks.py, utils.py), fixed dependency auto-installation to work before module imports, added timestamps to report filenames (YYMMDD_HHMMSS format), enforced code conventions with standardized import order and removed all inline comments, maintained 100% backward compatibility with no breaking changes
 - **2025-08-11**: **DorkAgent v1.4** - Enhanced security reports with specific information disclosure details, fixed critical notification race condition bug, improved attack vector analysis with actual parameters and payloads, added comprehensive development documentation (CLAUDE.md), restored requirements.txt format
 - **2025-05-18**: Modified README.md and banner, Added juicy google dorks, Medium article (https://medium.com/@yee-yore/llm-powered-agent-for-automated-google-dorking-dcb14d609dc2)
 - **2025-04-17**: Removed tasks(old).py, the version prior to prompt engineering; Deleted Google Dork for finding "Confidential" documents (most results were merely informative); Removed Google Dork targeting login panels; Added settings to help avoid LLM provider rate limits; Integrated Gemini Flash 2.0 (free to use and currently considered the best value LLM); Merged tasks.py and agents.py into dorkagent.py for simplified maintenance
