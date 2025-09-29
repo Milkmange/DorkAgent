@@ -2,21 +2,170 @@
 import sys, re, os, pyfiglet
 from datetime import datetime
 
-# 2. Third-party libraries
-from dotenv import load_dotenv
-from crewai import Crew, LLM, Task, Agent
-from langchain_openai import ChatOpenAI
-from termcolor import colored
-from prompt_toolkit import prompt
-from prompt_toolkit.completion import PathCompleter
-from crewai_tools import SerperDevTool, ScrapeWebsiteTool
+# Third-party
+THIRD_PARTY_IMPORT_ERROR = False
+try:
+    import pyfiglet
+    from crewai import Crew, LLM, Task, Agent
+    from crewai_tools import SerperDevTool, ScrapeWebsiteTool
+    from dotenv import load_dotenv
+    from langchain_openai import ChatOpenAI
+    from prompt_toolkit import prompt
+    from prompt_toolkit.completion import PathCompleter
+    from termcolor import colored
+except ImportError:
+    THIRD_PARTY_IMPORT_ERROR = True
+
+# --- Runtime environment bootstrap: Python & packages ---
+REQUIRED_PACKAGES = {
+    "python-dotenv": "dotenv",
+    "crewai": "crewai",
+    "crewai-tools": "crewai_tools",
+    "langchain-openai": "langchain_openai",
+    "termcolor": "termcolor",
+    "prompt-toolkit": "prompt_toolkit",
+    "pyfiglet": "pyfiglet",
+    "schedule": "schedule",
+}
+
+def warn_python_version():
+    """Warn when the running Python version differs from the supported version."""
+
+    required_major, required_minor, required_patch = 3, 11, 9
+    v = sys.version_info
+
+    if (v.major, v.minor) != (required_major, required_minor) or v.micro != required_patch:
+        print(f"[!] Detected Python {v.major}.{v.minor}.{v.micro}. Recommended: 3.11.9.")
+        print("[!] Continuing, but if you see issues, use Python 3.11.9.")
+
+def pip_install(spec: str):
+    """Install a package via pip with console feedback."""
+
+    try:
+        print(f"[+] Installing: {spec} ...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", spec])
+    except Exception as e:
+        print(f"[!] Failed to install {spec}: {e}")
+        raise
+
+def ensure_packages():
+    """Ensure required third-party packages are available."""
+
+    missing = []
+
+    for pip_name, import_name in REQUIRED_PACKAGES.items():
+        try:
+            importlib.import_module(import_name)
+        except Exception:
+            missing.append(pip_name)
+
+    req_file = os.path.join(os.path.dirname(__file__), "requirements.txt")
+
+    if missing and os.path.isfile(req_file):
+        try:
+            print(f"[+] Syncing dependencies from requirements.txt ...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_file, "--upgrade", "--upgrade-strategy", "only-if-needed"])
+            missing = []  # reset and re-evaluate
+
+            for pip_name, import_name in REQUIRED_PACKAGES.items():
+                importlib.import_module(import_name)
+            return
+        except Exception as e:
+            print(f"[!] Failed to install from requirements.txt: {e}. Falling back to per-package installs.")
+
+    # Install any still-missing packages individually
+    for pip_name in missing:
+        pip_install(pip_name)
+
+    # Final import verification
+    for _, import_name in REQUIRED_PACKAGES.items():
+        importlib.import_module(import_name)
+
+# Execute checks before importing third-party modules
+warn_python_version()
+ensure_packages()
+
+if THIRD_PARTY_IMPORT_ERROR:
+    import pyfiglet
+    from crewai import Crew, LLM, Task, Agent
+    from crewai_tools import SerperDevTool, ScrapeWebsiteTool
+    from dotenv import load_dotenv
+    from langchain_openai import ChatOpenAI
+    from prompt_toolkit import prompt
+    from prompt_toolkit.completion import PathCompleter
+    from termcolor import colored
+
+load_dotenv()
+
+ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
+
+def read_env_file(path: str) -> dict:
+    """Load key-value pairs from the .env file."""
+
+    data = {}
+
+    if os.path.isfile(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    if '=' in line:
+                        k, v = line.split('=', 1)
+                        data[k.strip()] = v.strip()
+        except Exception:
+            pass
+
+    return data
+
+def write_env_file(path: str, values: dict):
+    """Persist environment variables to the .env file."""
+
+    existing = read_env_file(path)
+    existing.update(values)
+    lines = [f"{k}={existing[k]}" for k in sorted(existing.keys())]
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+def ensure_api_keys(llm_type: str):
+    """Prompt for and store missing API keys."""
+
+    required_keys = ["SERPER_API_KEY"]
+
+    if llm_type == "openai":
+        required_keys.append("OPENAI_API_KEY")
+    elif llm_type == "anthropic":
+        required_keys.append("ANTHROPIC_API_KEY")
+    elif llm_type == "gemini":
+        required_keys.append("GEMINI_API_KEY")
+
+    missing = [k for k in required_keys if not os.getenv(k)]
+
+    if missing:
+        print("[!] Missing required API keys: " + ", ".join(missing))
+        provided = {}
+        for key in missing:
+            prompt_text = f"Enter value for {key}: "
+            try:
+                val = getpass.getpass(prompt_text)
+            except Exception:
+                val = input(prompt_text)
+            provided[key] = val.strip()
+        write_env_file(ENV_PATH, provided)
+        # Reload environment so subsequent code can read keys
+        load_dotenv(dotenv_path=ENV_PATH, override=True)
+
 
 def clear_terminal():
-    """Clear the terminal screen"""
+    """Clear the terminal screen."""
+
     os.system("cls" if os.name == "nt" else "clear")
 
 def display_banner():
-    """Display DorkAgent ASCII banner and version information"""
+    """Display the DorkAgent banner and version information."""
+
     print(" ")
     print(" ")
     ascii_banner = pyfiglet.figlet_format("Dork Agent", font="big")
@@ -27,8 +176,10 @@ def display_banner():
     print(colored("[Ver]", "red") + " Current DorkAgent version is v1.3")
     print("=" * 90)
 
-def verify_api_key(llm_type):
-    """Verify required API keys are present in environment"""
+
+def verify_api_key(llm_type: str):
+    """Verify required API keys are set."""
+
     required_keys = ["SERPER_API_KEY"]
 
     if llm_type == "openai":
@@ -42,14 +193,16 @@ def verify_api_key(llm_type):
 
     missing_keys = [key for key in required_keys if not os.getenv(key)]
     if missing_keys:
-        print("🚨 Missing required API keys:")
+        print("[!] Missing required API keys:")
         for key in missing_keys:
-            print(f"   ❌ {key} is not set")
+            print(f"    - {key} is not set")
         print("\nPlease check your .env file and set the missing keys.")
         sys.exit(1)
 
+
 def select_llm():
-    """Prompt user to select LLM provider and return configured instance"""
+    """Select and configure the LLM for agents."""
+
     claude_haiku = LLM(
         api_key=os.getenv('ANTHROPIC_API_KEY'),
         model='anthropic/claude-3-5-haiku-20241022',
@@ -81,12 +234,18 @@ def select_llm():
         elif choice == "3":
             return gemini_flash, "gemini"
         else:
-            print("❌ Invalid choice. Please enter 1 - 3.")
+            print("[!] Invalid choice. Please enter 1 - 3.")
 
-def get_file_path(prompt_text):
-    """Get file path from user with auto-completion support"""
+
+def get_file_path(prompt_text: str) -> str:
+    """Get file path with autocomplete support."""
+
     completer = PathCompleter()
     return prompt(prompt_text, completer=completer).strip()
+
+
+def get_target_domains() -> list:
+    """Get target domains from user input."""
 
 def get_target_domains():
     """Get target domains from user input or file"""
@@ -114,15 +273,17 @@ def get_target_domains():
                         target_domains.append(domain)
                 break 
             else:
-                print("❌ File not found. Please enter a valid file path.")
+                print("[!] File not found. Please enter a valid file path.")
         
         else:
-            print("🚨 Invalid choice. Please select 1 - 2.")
+            print("[!] Invalid choice. Please select 1 - 2.")
 
     return target_domains
 
-def select_depth():
-    """Prompt user to select search depth for Google Dorking"""
+
+def select_depth() -> str:
+    """Select search depth for dorking."""
+
     while True:
         print("\n")
         print("1] target.com")
@@ -134,13 +295,13 @@ def select_depth():
         if depth in ["1", "2", "3"]:
             return depth
         else:
-            print("❌ Invalid choice. Please enter 1 - 3.")
+            print("[!] Invalid choice. Please enter 1 - 3.")
 
-def integrate_notify():
-    """Prompt user to enable Telegram notification via notify tool"""
-    while True: 
-        print("\n") 
-        print("\n") 
+
+def integrate_notify() -> str:
+    """Ask user if they want to integrate notify tool."""
+
+    while True:
         print("\n")
  
         notify = input("[?] Do you want to send a report using notify? (Y or N): ").strip() 
@@ -148,16 +309,18 @@ def integrate_notify():
         if notify in ["Y", "y", "N", "n"]: 
             return notify 
         else: 
-            print("❌ Invalid choice. Please enter Y or N")
+            print("[!] Invalid choice. Please enter Y or N")
 
-def adjust_depth(target_domains, depth):
-    """Adjust domain search depth based on specified depth level"""
+
+def adjust_depth(target_domains: list, depth: str) -> list:
+    """Apply subdomain wildcard patterns based on depth selection."""
+
     try:
         depth = int(depth)  
         if depth < 1:  
             raise ValueError("Invalid depth value")
     except ValueError:
-        print("❌ Invalid depth input. Defaulting to depth = 1.")
+        print("[!] Invalid depth input. Defaulting to depth = 1.")
         depth = 1
 
     if depth == 1:
@@ -168,15 +331,19 @@ def adjust_depth(target_domains, depth):
 
     return adjusted_domains
 
-def sanitize_filename(domain_name):
-    """Remove characters invalid for filenames"""
+
+def sanitize_filename(domain_name: str) -> str:
+    """Sanitize domain name for safe file paths."""
+
     sanitized = domain_name.replace('*', 'wildcard')
     sanitized = re.sub(r'[\\/*?:"<>|]', '', sanitized)
     
     return sanitized
 
-def agents(llm):
-    """Create CrewAI agents for Google Dorking operations"""
+
+def agents(llm) -> list:
+    """Create and configure CrewAI agents."""
+
     searcher = Agent(
         role="searcher",
         goal="Performing advanced Google searches using Google Dorks",
@@ -205,8 +372,10 @@ def agents(llm):
 
     return [searcher, bughunter, writer]
 
-def task(target_domain, domain, agents):
-    """Define Google Dork search and analysis tasks"""
+
+def task(target_domain: str, domain: str, agents: list) -> list:
+    """Create tasks for the CrewAI workflow."""
+
     task1 = Task(
         description=f"""
         # Google Dorking Search Analysis
@@ -493,7 +662,7 @@ def task(target_domain, domain, agents):
 
         ## Formatting Requirements
         - Use clear section headers and professional formatting
-        - Include severity icons: 🔴 Critical, 🟠 High, 🟡 Medium, 🔵 Low, ℹ️ Info
+        - Include severity labels: [CRITICAL], [HIGH], [MEDIUM], [LOW], [INFO]
         - Assign unique IDs: AV-001 (Attack Vector), ID-001 (Information Disclosure)
         - Use tables for risk matrices and summaries
         - Include actionable commands and URLs where relevant
@@ -516,11 +685,11 @@ def task(target_domain, domain, agents):
         **Target Scope**: {target_domain}
         
         **Risk Distribution:**
-        - 🔴 Critical: <critical_count> findings
-        - 🟠 High: <high_count> findings  
-        - 🟡 Medium: <medium_count> findings
-        - 🔵 Low: <low_count> findings
-        - ℹ️ Informational: <info_count> findings
+        - [CRITICAL]: <critical_count> findings
+        - [HIGH]: <high_count> findings
+        - [MEDIUM]: <medium_count> findings
+        - [LOW]: <low_count> findings
+        - [INFO]: <info_count> findings
 
         **Key Attack Vectors Discovered:**
         - <primary_attack_vector_1>
@@ -607,8 +776,8 @@ def task(target_domain, domain, agents):
 
         | Finding ID | Type | Severity | Exploitability | Business Impact | Priority |
         |------------|------|----------|----------------|-----------------|----------|
-        | AV-001 | <type> | 🔴 Critical | Easy | High | 1 |
-        | ID-001 | <type> | 🟠 High | N/A | Medium | 2 |
+        | AV-001 | <type> | [CRITICAL] | Easy | High | 1 |
+        | ID-001 | <type> | [HIGH] | N/A | Medium | 2 |
 
         ---
 
@@ -675,7 +844,6 @@ def task(target_domain, domain, agents):
     return [task1, task2, task3]
 
 if __name__ == "__main__":
-
     # Display banner
     clear_terminal()
     display_banner()
@@ -684,7 +852,7 @@ if __name__ == "__main__":
     llm, llm_type = select_llm()
     agents = agents(llm)
 
-    # API KEY verification
+    # API key verification
     load_dotenv()
     verify_api_key(llm_type)
 
