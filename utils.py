@@ -58,6 +58,25 @@ def select_depth() -> str:
         else:
             print("[!] Invalid choice. Please enter 1 - 3.")
 
+def get_user_instructions() -> str:
+    """Get custom report generation instructions from user."""
+
+    print("\n")
+    print("You can provide custom instructions for report generation.")
+    print("Examples:")
+    print("  - Write the report in Korean")
+    print("  - Use formal technical language")
+    print("  - Focus on critical vulnerabilities only")
+    print("  - Include detailed remediation steps")
+    print("\n")
+
+    instructions = input("[?] Enter report instructions (press Enter for default): ").strip()
+
+    if not instructions:
+        instructions = "Generate a comprehensive security report with clear findings and actionable recommendations."
+
+    return instructions
+
 def integrate_notify() -> str:
     """Ask user if they want to integrate notify tool."""
 

@@ -67,6 +67,7 @@ from tasks import task
 from utils import (
     get_target_domains,
     select_depth,
+    get_user_instructions,
     adjust_depth,
     sanitize_filename,
     integrate_notify,
@@ -115,6 +116,10 @@ if __name__ == "__main__":
 
     clear_terminal()
     display_banner()
+    user_instructions = get_user_instructions()
+
+    clear_terminal()
+    display_banner()
     notify = integrate_notify()
 
     now = datetime.now()
@@ -145,7 +150,7 @@ if __name__ == "__main__":
             output_log_file=True,
         )
 
-        result = crew.kickoff()
+        result = crew.kickoff(inputs={'user_instructions': user_instructions})
 
         crew_output = str(result)
 
