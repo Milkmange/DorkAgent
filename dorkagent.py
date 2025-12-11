@@ -52,8 +52,7 @@ if THIRD_PARTY_IMPORT_ERROR:
     sys.exit(0)
 
 from config import (
-    ensure_api_keys,
-    select_llm_type,
+    select_llm,
     create_llm
 )
 
@@ -62,7 +61,7 @@ from crewai import Crew
 from dotenv import load_dotenv
 from termcolor import colored
 
-from agents import agents
+from agents import agents as create_agents
 from tasks import task
 from utils import (
     get_target_domains,
@@ -89,21 +88,18 @@ def display_banner():
     print(colored("                                        by yee-yore", "red"))
     print("\n")
     print("DorkAgent is a LLM-powered agent for automated Google Dorking in bug hunting & pentesting.")
-    print(colored("[Ver]", "red") + " Current DorkAgent version is v1.3")
+    print(colored("[Ver]", "red") + " Current DorkAgent version is v1.4")
     print("=" * 90)
 
 if __name__ == "__main__":
     clear_terminal()
     display_banner()
 
-    llm_type = select_llm_type()
-
     load_dotenv()
-    ensure_api_keys(llm_type)
+    provider, model = select_llm()
+    llm = create_llm(provider, model)
 
-    llm = create_llm(llm_type)
-
-    agents = agents(llm)
+    agent_list = create_agents(llm)
 
     clear_terminal()
     display_banner()
@@ -132,18 +128,16 @@ if __name__ == "__main__":
         original_domain = target_domain
 
         if '*' in target_domain:
-            domain_parts = target_domain.split('.')
-            base_domain = domain_parts[1]
+            base_domain = '.'.join([p for p in target_domain.split('.') if p != '*'])
         else:
-            domain = target_domain.split('.', maxsplit=target_domain.count('.'))[-1]
             base_domain = target_domain
 
         safe_domain = sanitize_filename(base_domain)
 
-        tasks = task(original_domain, domain, agents)
+        tasks = task(original_domain, domain, agent_list)
 
         crew = Crew(
-            agents=agents,
+            agents=agent_list,
             tasks=tasks,
             verbose=1,
             max_rpm=15,

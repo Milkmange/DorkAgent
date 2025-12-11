@@ -1,5 +1,6 @@
-import sys, os, getpass
+import sys, os, getpass, re
 
+import requests
 from dotenv import load_dotenv
 from crewai import LLM
 from langchain_openai import ChatOpenAI
@@ -21,8 +22,8 @@ def read_env_file(path: str) -> dict:
                     if '=' in line:
                         k, v = line.split('=', 1)
                         data[k.strip()] = v.strip()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[!] Warning: Could not read .env file: {e}")
 
     return data
 
@@ -36,20 +37,20 @@ def write_env_file(path: str, values: dict):
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
-def ensure_api_keys(llm_type: str):
-    """Prompt for and store missing API keys."""
-
+def ensure_provider_api_key(provider: str):
+    """Ensure provider-specific API key is available."""
+    
     required_keys = ["SERPER_API_KEY"]
-
-    if llm_type == "openai":
+    
+    if provider == "openai":
         required_keys.append("OPENAI_API_KEY")
-    elif llm_type == "anthropic":
+    elif provider == "anthropic":
         required_keys.append("ANTHROPIC_API_KEY")
-    elif llm_type == "gemini":
+    elif provider == "gemini":
         required_keys.append("GEMINI_API_KEY")
-
+    
     missing = [k for k in required_keys if not os.getenv(k)]
-
+    
     if missing:
         print("[!] Missing required API keys: " + ", ".join(missing))
         provided = {}
@@ -62,41 +63,88 @@ def ensure_api_keys(llm_type: str):
             provided[key] = val.strip()
         write_env_file(ENV_PATH, provided)
         load_dotenv(dotenv_path=ENV_PATH, override=True)
+    
+    # Return the provider-specific API key
+    if provider == "openai":
+        return os.getenv("OPENAI_API_KEY")
+    elif provider == "anthropic":
+        return os.getenv("ANTHROPIC_API_KEY")
+    elif provider == "gemini":
+        return os.getenv("GEMINI_API_KEY")
 
-def verify_api_key(llm_type: str):
-    """Verify required API keys are set."""
+def fetch_models(provider: str, api_key: str):
+    """Fetch available models from provider API."""
+    
+    try:
+        if provider == "openai":
+            headers = {"Authorization": f"Bearer {api_key}"}
+            response = requests.get("https://api.openai.com/v1/models", headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                models = response.json()["data"]
+                # Filter for GPT-4 and GPT-5 models, exclude snapshot and special purpose models
+                exclude_keywords = ['transcribe', 'tts', 'codex', 'preview', 'search', 'audio', 'chat']
+                filtered_models = [model for model in models 
+                                 if model["id"].startswith(("gpt-4", "gpt-5")) and 
+                                 not re.search(r'-\d{4}-\d{2}-\d{2}', model["id"]) and
+                                 not any(keyword in model["id"] for keyword in exclude_keywords)]
+                return [(model["id"], model["id"]) for model in filtered_models]
+            else:
+                print(f"[!] Failed to fetch OpenAI models: {response.status_code}")
+                return []
+                
+        elif provider == "anthropic":
+            headers = {
+                "X-Api-Key": api_key,
+                "anthropic-version": "2023-06-01"
+            }
+            response = requests.get("https://api.anthropic.com/v1/models", headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                models = response.json()["data"]
+                # Filter for Claude models only
+                filtered_models = [model for model in models if model["id"].startswith("claude-")]
+                return [(model["id"], model["display_name"]) for model in filtered_models]
+            else:
+                print(f"[!] Failed to fetch Anthropic models: {response.status_code}")
+                return []
+            
+        elif provider == "gemini":
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+            response = requests.get(url, timeout=10)
+            
+            if response.status_code == 200:
+                models = response.json()["models"]
+                # Filter for models that support generateContent and exclude experimental/preview models
+                exclude_keywords = ['experimental', '001', 'preview', 'banana']
+                gen_models = [model for model in models 
+                            if "generateContent" in model.get("supportedGenerationMethods", []) and
+                            not any(keyword in model["name"].lower() or keyword in model["displayName"].lower() 
+                                   for keyword in exclude_keywords)]
+                return [(model["name"].split("/")[-1], model["displayName"]) for model in gen_models]
+            else:
+                print(f"[!] Failed to fetch Gemini models: {response.status_code}")
+                return []
+                
+    except requests.RequestException as e:
+        print(f"[!] Network error while fetching models: {e}")
+        return []
+    except Exception as e:
+        print(f"[!] Error fetching models: {e}")
+        return []
 
-    required_keys = ["SERPER_API_KEY"]
-
-    if llm_type == "openai":
-        required_keys.append("OPENAI_API_KEY")
-    elif llm_type == "anthropic":
-        required_keys.append("ANTHROPIC_API_KEY")
-    elif llm_type == "gemini":
-        required_keys.append("GEMINI_API_KEY")
-
-    load_dotenv()
-
-    missing_keys = [key for key in required_keys if not os.getenv(key)]
-    if missing_keys:
-        print("[!] Missing required API keys:")
-        for key in missing_keys:
-            print(f"    - {key} is not set")
-        print("\nPlease check your .env file and set the missing keys.")
-        sys.exit(1)
-
-def select_llm_type():
-    """Select LLM type for agents."""
-
+def select_provider():
+    """Select LLM provider."""
+    
     while True:
         print("\n")
-        print("1. GPT-4.1 Mini")
-        print("2. Claude 3.5 Haiku")
-        print("3. Gemini 2.0 Flash")
+        print("1. OpenAI")
+        print("2. Anthropic")
+        print("3. Google (Gemini)")
         print("\n")
-
-        choice = input("[?] Choose LLM for Agents (1 - 3): ").strip()
-
+        
+        choice = input("[?] Choose LLM Provider (1 - 3): ").strip()
+        
         if choice == "1":
             return "openai"
         elif choice == "2":
@@ -106,22 +154,63 @@ def select_llm_type():
         else:
             print("[!] Invalid choice. Please enter 1 - 3.")
 
-def create_llm(llm_type):
-    """Create LLM instance based on type."""
+def select_model(models: list):
+    """Select model from available models list."""
+    
+    while True:
+        print("\n")
+        print("Available models:")
+        for i, (model_id, display_name) in enumerate(models, 1):
+            print(f"{i}. {display_name}")
+        print("\n")
+        
+        try:
+            choice = int(input(f"[?] Choose model (1 - {len(models)}): ").strip())
+            if 1 <= choice <= len(models):
+                return models[choice - 1][0]  # Return model_id
+            else:
+                print(f"[!] Invalid choice. Please enter 1 - {len(models)}.")
+        except ValueError:
+            print("[!] Please enter a valid number.")
 
-    if llm_type == "openai":
+def select_llm():
+    """Complete LLM selection workflow."""
+    
+    # Step 1: Select provider
+    provider = select_provider()
+    
+    # Step 2: Ensure API key is available
+    api_key = ensure_provider_api_key(provider)
+    
+    # Step 3: Fetch available models
+    print(f"\n[+] Fetching available models for {provider.title()}...")
+    models = fetch_models(provider, api_key)
+    
+    if not models:
+        print(f"[!] Could not fetch models for {provider}. Please check your API key and try again.")
+        sys.exit(1)
+    
+    # Step 4: Select model
+    selected_model = select_model(models)
+    
+    return provider, selected_model
+
+def create_llm(provider: str, model: str):
+    """Create LLM instance based on provider and model."""
+
+    if provider == "openai":
         return ChatOpenAI(
-            model_name="gpt-4.1-mini-2025-04-14",
+            model_name=model,
         )
-    elif llm_type == "anthropic":
+    elif provider == "anthropic":
         return LLM(
             api_key=os.getenv('ANTHROPIC_API_KEY'),
-            model='anthropic/claude-3-5-haiku-20241022',
+            model=f'anthropic/{model}',
         )
-    elif llm_type == "gemini":
+    elif provider == "gemini":
         return LLM(
             api_key=os.getenv('GEMINI_API_KEY'),
-            model='gemini/gemini-2.5-flash',
+            model=f'gemini/{model}',
         )
     else:
-        raise ValueError(f"Unknown LLM type: {llm_type}")
+        raise ValueError(f"Unknown provider: {provider}")

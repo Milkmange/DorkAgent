@@ -1,5 +1,5 @@
 from crewai import Agent
-from crewai_tools import SerperDevTool, ScrapeWebsiteTool
+from crewai_tools import SerperDevTool, ScrapeWebsiteTool, FileWriterTool
 
 def agents(llm) -> list:
     """Create and configure CrewAI agents."""
@@ -27,7 +27,9 @@ def agents(llm) -> list:
         goal="Generating well-structured and detailed reports based on findings",
         backstory="A technical writer specializing in cybersecurity documentation and structured reporting",
         verbose=True,
+        tools=[FileWriterTool()],
         llm=llm,
+        inject_date=True,
     )
 
     return [searcher, bughunter, writer]

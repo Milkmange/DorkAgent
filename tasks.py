@@ -1,4 +1,5 @@
 from crewai import Task
+from models import DorkingResults, VulnerabilityAnalysis
 
 def task(target_domain: str, domain: str, agents: list) -> list:
     """Create tasks for the CrewAI workflow."""
@@ -88,35 +89,9 @@ def task(target_domain: str, domain: str, agents: list) -> list:
           * Avoid results from known documentation domains
           * Filter out URLs with explicit non-production indicators
         """,
-        expected_output=f"""
-        <findings>
-        [
-          {{
-            "total_queries": <number_of_queries_executed>,
-            "queries_with_results": <number_of_queries_with_results>,
-            "total_urls_found": <number_of_urls_found>,
-            "results": [
-              // Only include this section if results were actually found
-              {{
-                "query_index": <index_of_query>,
-                "query": "<exact_query_executed>",
-                "urls_found": [
-                  {{
-                    "url": "<actual_url_found>",
-                    "title": "<actual_page_title>",
-                    "description": "<brief_description_of_actual_content>"
-                  }}
-                  // Additional URLs if found
-                ]
-              }}
-              // Additional queries with results
-            ],
-            "queries_without_results": [<indices_of_queries_that_returned_no_results>]
-          }}
-        ]
-        </findings>
-        """,
-        agent=agents[0]
+        expected_output="Provide a comprehensive summary of Google Dorking search results including: total number of queries executed (30), number of queries that returned actual results, total number of unique URLs found, and a detailed list of all discovered URLs with their titles, descriptions, and content snippets. Focus only on real search results that actually exist and exclude any example, demo, or documentation content.",
+        agent=agents[0],
+        output_pydantic=DorkingResults
     )
 
     task2 = Task(
@@ -141,47 +116,83 @@ def task(target_domain: str, domain: str, agents: list) -> list:
         - If data contains elements like "example_value_based_audience_file" or similar indicators of non-production data, exclude it
         - Pay special attention to file metadata, headers, or comments that might indicate example status
 
+        ## Field Classification Guide
+        **IMPORTANT: Understand the difference between discovery_type and category fields:**
+
+        ### Discovery Type Classification:
+        - **"Vulnerability"**: Use when finding represents an actual security flaw or weakness
+          - Examples: SQL Injection, XSS, exposed credentials, misconfigured services
+          - Criteria: Something that can be directly exploited or poses immediate security risk
+        
+        - **"Attack Vector"**: Use when finding represents a potential attack path or information gathering point
+          - Examples: parameter manipulation points, admin panel discovery, directory listings, URL patterns
+          - Criteria: Information useful for further reconnaissance or potential attack entry points
+
+        ### Category Field:
+        Use one of the 26 predefined categories below (separate from discovery_type)
+
+        ### Examples of Correct Field Usage:
+        ```
+        URL: /admin/login.php
+        - discovery_type: "Attack Vector" (potential entry point)
+        - category: "Admin Panel"
+
+        URL: /config.php (containing database passwords)
+        - discovery_type: "Vulnerability" (actual security flaw)  
+        - category: "Sensitive Data Exposure"
+
+        URL: /api/users?id=123
+        - discovery_type: "Attack Vector" (parameter manipulation point)
+        - category: "IDOR"
+        ```
+
         ## Analysis Categories
-        1. Sensitive File Exposure:
-           - Configuration files (.env, config.yml, web.config, .ini, .conf)
-           - Source code-related files (.git, package.json, requirements.txt, .gitignore)
-           - Directory listings (index of /)
-           - Log files (*.log)
-           - Backup files (*.bak, *.backup, *.old)
-           - Database dump files (*.sql, *.dump)
+        Analyze findings using one of the following 26 security categories that match the Pydantic model:
 
-        2. Sensitive Information Exposure:
-           - API keys, access tokens, OAuth credentials
-           - Hardcoded passwords, connection strings
-           - Cloud credentials (AWS/Azure/GCP)
-           - Encryption keys, private certificates
-           - Session identifiers, cookie information
-           - Personally identifiable information (PII) - emails, phone numbers, social security numbers, credit card info
+        **File and Directory Exposure:**
+        - Directory Listing: Exposed directory browsing allowing enumeration of files and folders
+        - Configuration Files: Exposed configuration files containing sensitive settings
+        - Backup Files: Accessible backup files that may contain sensitive data or code
+        - Development Environment: Exposed development/staging environments with debugging info
 
-        3. Potential Attack Vectors:
-           - URL parameter manipulation points (inurl:action, inurl:page, inurl:pid, inurl:uid, inurl:id, inurl:search, etc.)
-           - Parameters potentially vulnerable to SQL injection
-           - Output points potentially vulnerable to XSS
-           - URL/file handling parameters with SSRF potential
-           - Potential file inclusion attack vectors (inurl:index.php?page, inurl:file, inurl:inc, etc.)
-           - File upload/download endpoints (inurl:/upload.php, inurl:/uploads.jsp, inurl:/download.php, etc.)
-           - File path parameters potentially vulnerable to path traversal attacks
+        **Information Disclosure:**
+        - Information Disclosure: General information leakage not fitting other categories
+        - Sensitive Data Exposure: Exposed PII, credentials, or confidential business data
+        - Token Exposure: Exposed API keys, access tokens, session tokens, or authentication credentials
+        - OSINT: Open Source Intelligence gathering revealing organizational information
 
-        4. Authentication/Authorization Issues:
-           - Exposed admin pages (inurl:admin, inurl:administrator, inurl:wp-login)
-           - Insecure authentication mechanisms
-           - Access control flaws (IDOR, etc.)
-           - Open redirect vulnerabilities (inurl:url, inurl:continue, inurl:returnto, inurl:redirect, etc.)
-           - Session management issues
+        **Authentication and Access Control:**
+        - Admin Panel: Exposed administrative interfaces or management consoles
+        - IDOR: Insecure Direct Object References allowing unauthorized data access
 
-        5. Infrastructure Information Exposure:
-           - Cloud storage misconfigurations (S3 buckets, Azure Blob, etc.)
-           - Internal IP addresses, hostnames
-           - Development environment information
-           - Service structure information
-           - Internal collaboration tool links (Slack, Trello, Notion, Teams, etc.)
-           - Restricted path information through robots.txt
-           - Server version, operating system information
+        **Injection Vulnerabilities:**
+        - XSS: Cross-Site Scripting vulnerabilities in input fields or output contexts
+        - Cross Site Scripting: Alternative classification for XSS findings
+        - SQL Injection: Database injection vulnerabilities through user inputs
+        - Command Injection: Operating system command injection attack vectors
+        - LFI/RFI: Local or Remote File Inclusion vulnerabilities
+
+        **Web Application Security:**
+        - CSRF: Cross-Site Request Forgery vulnerabilities
+        - Clickjacking: UI redressing attacks through iframe manipulation
+        - Open Redirect: Unvalidated redirects leading to malicious sites
+        - Server Side Request Forgery: SSRF vulnerabilities allowing internal network access
+        - Path Traversal: Directory traversal vulnerabilities accessing unauthorized files
+
+        **File Handling:**
+        - API Exposure: Exposed APIs revealing functionality or data
+        - File Upload/Download: Insecure file handling mechanisms
+
+        **Infrastructure and Cloud:**
+        - Cloud Storage Misconfiguration: Publicly accessible cloud storage buckets or containers
+        - Social Engineering: Information useful for social engineering attacks
+        - Subdomain Enumeration: Discovery of additional subdomains expanding attack surface
+
+        **CMS-Specific:**
+        - WordPress Vulnerabilities: WordPress-specific security issues and misconfigurations
+
+        **General:**
+        - Misc: Miscellaneous findings not fitting other specific categories
 
         ## Severity Assessment Criteria
         - Critical: Direct system access or sensitive data exposure (credentials, tokens, PII)
@@ -189,121 +200,41 @@ def task(target_domain: str, domain: str, agents: list) -> list:
         - Medium: Vulnerabilities with limited impact (partial information disclosure, potential injection points)
         - Low: Information exposure without a direct attack vector
 
-        ## For Each Finding, Analyze:
-        1. Vulnerability type
-        2. Location (URL)
-        3. Severity (Critical, High, Medium, Low)
-        4. Vulnerability description
-        5. Potential impact
-        6. Attack vector (PoC or verification method)
         """,
-        expected_output=f"""
-        <findings>
-        [
-          {{
-            "domain": "{target_domain}",
-            "total_urls_analyzed": <number_of_urls_analyzed>,
-            "total_vulnerabilities": <number_of_vulnerabilities_found>,
-            "total_excluded": <number_of_urls_excluded>,
-            "vulnerabilities": [
-              // Only include if actual vulnerabilities were found based on real results
-              {{
-                "type": "<vulnerability_type>",
-                "subtype": "<vulnerability_subtype>",
-                "url": "<actual_url_from_search_results>",
-                "severity": "<severity_level>",
-                "description": "<description_of_actual_vulnerability>",
-                "impact": "<potential_impact>",
-                "evidence": "<actual_evidence_from_page>",
-                "exploit_vector": "<how_the_vulnerability_could_be_exploited>",
-                "remediation": "<recommended_fix>"
-              }}
-              // Additional vulnerabilities if found
-            ],
-            "excluded_urls": [
-              // Only include if URLs were excluded
-              {{
-                "url": "<excluded_url>",
-                "reason": "<reason_for_exclusion>"
-              }}
-              // Additional excluded URLs
-            ]
-          }}
-        ]
-        </findings>
-        """,
+        expected_output="Analyze the Google Dorking search results and provide detailed vulnerability and attack vector findings. For each discovered URL, classify it as either a web page or file, identify the discovery type (vulnerability or attack vector), categorize the finding using one of the predefined categories (Directory Listing, IDOR, Admin Panel, Information Disclosure, etc.), assign appropriate severity level, provide detailed description of the security implications, suggest specific testing methods, recommend mitigation strategies, and determine if it's a false positive with reasoning.",
         agent=agents[1],
+        output_pydantic=VulnerabilityAnalysis
     )
 
     task3 = Task(
         description=f"""
         # Enhanced Security Assessment Report Creation
 
-        ## USER INSTRUCTIONS
-        **IMPORTANT: Follow these user requirements for the report:**
-        {{user_instructions}}
+        ## CRITICAL INSTRUCTIONS
+        - **FOLLOW USER INSTRUCTIONS**: Strictly adhere to the user instructions provided: {{user_instructions}}
+        - ONLY include vulnerabilities and findings that were ACTUALLY identified by the bug hunter in Task 2
+        - NEVER fabricate or hallucinate any vulnerabilities, findings, or evidence
+        - If the bug hunter found no vulnerabilities, state clearly that no vulnerabilities were found
+        - Use ONLY real data from the previous tasks - do not use any example data from this prompt
+        - Focus on providing actionable intelligence for manual security testing
 
         ## Objective
         Create a comprehensive security assessment report for {target_domain} that provides actionable intelligence for attack vector exploitation and information disclosure remediation.
 
-        ## CRITICAL INSTRUCTIONS
-        - **FOLLOW USER INSTRUCTIONS**: Strictly adhere to the user instructions provided above (language, format, focus areas, etc.).
-        - ONLY include vulnerabilities and findings that were ACTUALLY identified by the bug hunter in Task 2.
-        - NEVER fabricate or hallucinate any vulnerabilities, findings, or evidence.
-        - If the bug hunter found no vulnerabilities, state clearly that no vulnerabilities were found.
-        - Use ONLY real data from the previous tasks - do not use any example data from this prompt.
-        - Focus on providing actionable intelligence for manual security testing.
+        ## Report Structure
+        Create a professional security assessment report with the following sections:
+        1. Executive Summary - scope, findings count, risk distribution, key discoveries
+        2. Attack Vector Analysis - categorized by vulnerability type with testing recommendations
+        3. Information Disclosure Assessment - data sensitivity analysis and remediation steps
+        4. Technical Findings - detailed vulnerability descriptions with evidence and impact
+        5. Risk Prioritization Matrix - exploitability vs impact ranking for testing order
 
-        ## Enhanced Report Structure
-
-        ### 1. Executive Summary
-        - Target scope and methodology
-        - Total findings count and risk distribution
-        - Key attack vectors discovered
-        - Information disclosure summary
-        - Overall risk rating and business impact
-
-        ### 2. Attack Vector Analysis
-        - Categorize findings by attack vector type (XSS, SQLi, SSRF, LFI, Open Redirect, etc.)
-        - Provide manual testing recommendations for each vector
-        - Include tool suggestions (Burp Suite, SQLMap, XSStrike, etc.)
-        - Rate exploitability (Easy, Medium, Hard)
-
-        ### 3. Information Disclosure Assessment
-        - Categorize by data sensitivity (Credentials, PII, Source Code, Configs, etc.)
-        - Assess business and compliance impact (GDPR, HIPAA, PCI-DSS)
-        - Provide immediate remediation steps
-        - Rate exposure risk and accessibility
-
-        ### 4. Technical Findings
-        - Detailed vulnerability descriptions with evidence
-        - Proof of concept guidance for manual testing
-        - Reproduction steps where applicable
-        - Impact analysis and exploitation scenarios
-
-        ### 5. Risk Prioritization Matrix
-        - Rank findings by exploitability vs impact
-        - Recommend testing order for security researchers
-        - Highlight quick wins and critical exposures
-
-        ### 6. Next Steps & Recommendations
-        - Manual testing recommendations for each finding
-        - Suggested tools and techniques
-        - Timeline for validation and remediation
-        - Additional reconnaissance suggestions
-
-        ## Formatting Requirements
-        - Use clear section headers and professional formatting
-        - Include severity labels: [CRITICAL], [HIGH], [MEDIUM], [LOW], [INFO]
-        - Assign unique IDs: AV-001 (Attack Vector), ID-001 (Information Disclosure)
-        - Use tables for risk matrices and summaries
-        - Include actionable commands and URLs where relevant
-
-        ## Focus Areas
-        - Provide specific manual testing guidance
-        - Emphasize actionable intelligence over generic descriptions
-        - Include business context and real-world impact
-        - Suggest verification methods and tools
+        ## Formatting Guidelines
+        - Use clear section headers and professional markdown formatting
+        - Include severity labels: [CRITICAL], [HIGH], [MEDIUM], [LOW], [INFO]  
+        - Assign unique finding IDs: AV-001, ID-001, etc.
+        - Include actionable commands, URLs, and tool recommendations where relevant
+        - Focus on specific manual testing guidance and business impact
         """,
         expected_output=f"""
         **NOTE: Follow the user instructions provided: {{user_instructions}}**
@@ -344,25 +275,30 @@ def task(target_domain: str, domain: str, agents: list) -> list:
 
         ### Parameter Injection Opportunities
 
-        #### AV-001: <Attack Vector Type> - <URL>
-        - **Vector Type**: <XSS/SQLi/SSRF/LFI/etc>
-        - **Parameter**: <parameter_name> (<GET/POST> parameter)
-        - **Evidence**: <actual_error_message_or_response>
-        - **Test Payload**: <specific_payload_used>
-        - **Exploitability**: <Easy/Medium/Hard>
+        #### AV-001: <Category> - <URL>
+        - **Discovery Type**: Attack Vector
+        - **Classification**: <Web Page/File>
+        - **Category**: <One of 26 Pydantic categories>
+        - **Severity**: <Critical/High/Medium/Low/Info>
+        - **Description**: <Detailed security implications>
+        - **Test Method**: <Specific testing approach>
+        - **Mitigation**: <Recommended remediation steps>
+        - **False Positive**: <true/false> - <reason if applicable>
         - **Manual Testing**:
           - Tool: <recommended_tool>
           - Command: `<specific_command_or_payload>`
-        - **Business Impact**: <actual_business_impact>
 
         ### Administrative Interface Exposure
 
-        #### AV-002: <Admin Panel Type> - <URL>
-        - **Interface Type**: <admin_panel_description>
-        - **Authentication**: <authentication_status>
-        - **Page Title**: <actual_page_title>
-        - **Login Fields**: <username_field>, <password_field>
-        - **Testing Approach**: <specific_manual_testing_steps>
+        #### AV-002: <Category> - <URL>
+        - **Discovery Type**: Attack Vector
+        - **Classification**: <Web Page/File>
+        - **Category**: Admin Panel
+        - **Severity**: <Critical/High/Medium/Low/Info>
+        - **Description**: <Detailed security implications>
+        - **Test Method**: <Specific testing approach>
+        - **Mitigation**: <Recommended remediation steps>
+        - **False Positive**: <true/false> - <reason if applicable>
 
         ---
 
@@ -372,102 +308,94 @@ def task(target_domain: str, domain: str, agents: list) -> list:
 
         ### Sensitive Data Exposure
 
-        #### ID-001: <Data Type> Exposure - <URL>
-        - **Information Found**: <specific_information_description>
-        - **Specific Data Exposed**:
-          - <data_item_1>: <actual_value_1>
-          - <data_item_2>: <actual_value_2>
-          - <data_item_3>: <actual_value_3>
+        #### ID-001: <Category> - <URL>
+        - **Discovery Type**: Vulnerability
+        - **Classification**: <Web Page/File>
+        - **Category**: <Sensitive Data Exposure/Token Exposure/Configuration Files/etc>
+        - **Severity**: <Critical/High/Medium/Low/Info>
+        - **Description**: <Detailed security implications>
+        - **Test Method**: <How to verify this vulnerability>
+        - **Mitigation**: <Specific remediation steps>
+        - **False Positive**: <true/false> - <reason if applicable>
         - **Content Preview**: `<sample_content_from_file>`
-        - **Sensitivity Level**: <critical/high/medium/low>
-        - **File Location**: <file_path_or_directory>
         - **Accessibility**: <publicly_accessible/authentication_required>
-        - **Compliance Risk**: <gdpr/hipaa/pci_specific_risk>
-        - **Immediate Action**: <specific_remediation_step>
 
         ### Configuration & Source Code Leakage
 
-        #### ID-002: <File Type> - <URL>
-        - **File Type**: <configuration_file/source_code/backup/etc>
-        - **Information Found**: <specific_information_in_file>
-        - **Sensitive Content**:
-          - API Keys: <api_key_count> found
-          - Database Info: <database_details>
-          - Internal IPs: <ip_addresses>
-          - Credentials: <credential_details>
+        #### ID-002: <Category> - <URL>
+        - **Discovery Type**: Vulnerability
+        - **Classification**: <Web Page/File>
+        - **Category**: <Configuration Files/Backup Files/Information Disclosure>
+        - **Severity**: <Critical/High/Medium/Low/Info>
+        - **Description**: <Detailed security implications>
+        - **Test Method**: <How to verify this vulnerability>
+        - **Mitigation**: <Specific remediation steps>
+        - **False Positive**: <true/false> - <reason if applicable>
         - **Content Sample**:
           ```
           <actual_code_or_config_snippet>
           ```
-        - **Risk Level**: <critical/high/medium/low>
-        - **File Size**: <file_size>
-        - **Last Modified**: <modification_date>
-        - **Remediation**: <specific_fix_action>
 
         ---
 
-        ## 4. Risk Prioritization Matrix
+        ## 4. Technical Findings
 
-        | Finding ID | Type | Severity | Exploitability | Business Impact | Priority |
-        |------------|------|----------|----------------|-----------------|----------|
-        | AV-001 | <type> | [CRITICAL] | Easy | High | 1 |
-        | ID-001 | <type> | [HIGH] | N/A | Medium | 2 |
+        ### Detailed Vulnerability Analysis
+
+        For each finding, provide comprehensive technical details:
+
+        #### <Finding_ID>: <Category> - <URL>
+        - **Discovery Type**: <Vulnerability/Attack Vector>
+        - **Classification**: <Web Page/File>
+        - **Category**: <One of 26 categories from Pydantic model>
+        - **Severity**: <Critical/High/Medium/Low/Info>
+        - **Description**: <Comprehensive explanation of the security issue>
+        - **Test Method**: <Step-by-step verification process>
+        - **Mitigation**: <Detailed remediation recommendations>
+        - **False Positive**: <true/false>
+        - **FP Reason**: <If false positive, explain why>
+        - **Impact Analysis**: <Potential business and technical impact>
+        - **Exploitation Scenario**: <How this could be exploited>
 
         ---
 
-        ## 5. Manual Testing Recommendations
+        ## 5. Risk Prioritization Matrix
 
-        ### Immediate Actions
-        1. **<Finding_ID>**: <specific_manual_test>
-        2. **<Finding_ID>**: <specific_manual_test>
+        | Finding ID | Category | Discovery Type | Severity | Exploitability | Business Impact | Priority |
+        |------------|----------|----------------|----------|----------------|-----------------|----------|
+        | AV-001 | <category> | Attack Vector | [CRITICAL] | Easy | High | 1 |
+        | ID-001 | <category> | Vulnerability | [HIGH] | N/A | Medium | 2 |
+        | AV-002 | <category> | Attack Vector | [MEDIUM] | Medium | Low | 3 |
+
+        ### Testing Priority Recommendations
+
+        #### Immediate Actions (Week 1)
+        1. **<Finding_ID>**: <specific_manual_test_with_tools>
+        2. **<Finding_ID>**: <specific_manual_test_with_tools>
+
+        #### Secondary Testing (Week 2)
+        1. **<Finding_ID>**: <specific_manual_test_with_tools>
+        2. **<Finding_ID>**: <specific_manual_test_with_tools>
 
         ### Testing Tools & Commands
         ```bash
         # For SQL Injection testing
-        sqlmap -u "<url_with_parameter>" --dbs
+        sqlmap -u "<url_with_parameter>" --dbs --batch
 
         # For XSS testing
-        xsstrike -u "<url_with_parameter>"
+        xsstrike -u "<url_with_parameter>" --crawl
 
         # For directory brute-forcing
-        ffuf -u "<url>/FUZZ" -w /path/to/wordlist
+        ffuf -u "<url>/FUZZ" -w /usr/share/wordlists/dirb/common.txt
+
+        # For parameter fuzzing
+        ffuf -u "<url>?FUZZ=test" -w /usr/share/wordlists/burp-parameter-names.txt
         ```
 
         ### Burp Suite Extensions
-        - <recommended_extension_1> for <vulnerability_type>
-        - <recommended_extension_2> for <attack_vector>
-
-        ---
-
-        ## 6. Next Steps & Timeline
-
-        ### Week 1: Critical & High Priority
-        - [ ] Validate AV-001: <specific_test>
-        - [ ] Secure ID-001: <remediation_action>
-
-        ### Week 2: Medium Priority
-        - [ ] Test remaining parameter injection points
-        - [ ] Review exposed configuration files
-
-        ### Ongoing Monitoring
-        - Implement monitoring for new exposed endpoints
-        - Regular Google Dorking assessments
-        - Directory listing prevention validation
-
-        ---
-
-        ## 7. Additional Reconnaissance Suggestions
-
-        ### Subdomain Enumeration
-        ```bash
-        sublist3r -d {target_domain}
-        amass enum -d {target_domain}
-        ```
-
-        ### Technology Stack Analysis
-        - Wappalyzer analysis of discovered endpoints
-        - Version detection on exposed services
-        - Framework-specific vulnerability research
+        - **Param Miner**: For discovering hidden parameters
+        - **Autorize**: For testing authorization bypass
+        - **Logger++**: For comprehensive request/response logging
 
         ---
 
@@ -476,3 +404,4 @@ def task(target_domain: str, domain: str, agents: list) -> list:
         agent=agents[2],
     )
     return [task1, task2, task3]
+

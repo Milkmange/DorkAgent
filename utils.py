@@ -1,4 +1,6 @@
 import os
+import re
+import subprocess
 
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import PathCompleter
@@ -61,15 +63,13 @@ def select_depth() -> str:
 def get_user_instructions() -> str:
     """Get custom report generation instructions from user."""
 
-    print("\n")
     print("You can provide custom instructions for report generation.")
+    print("\n")    
     print("Examples:")
     print("  - Write the report in Korean")
     print("  - Use formal technical language")
     print("  - Focus on critical vulnerabilities only")
-    print("  - Include detailed remediation steps")
     print("\n")
-
     instructions = input("[?] Enter report instructions (press Enter for default): ").strip()
 
     if not instructions:
@@ -81,6 +81,9 @@ def integrate_notify() -> str:
     """Ask user if they want to integrate notify tool."""
 
     while True:
+        print("\n")
+        print("\n")
+        print("\n")
         print("\n")
 
         notify = input("[?] Do you want to send a report using notify? (Y or N): ").strip()
@@ -111,9 +114,6 @@ def adjust_depth(target_domains: list, depth: str) -> list:
 
 def sanitize_filename(domain_name: str) -> str:
     """Sanitize domain name for safe file paths."""
-
-    import re
-
     sanitized = domain_name.replace('*', 'wildcard')
     sanitized = re.sub(r'[\\/*?:"<>|]', '', sanitized)
 
@@ -121,9 +121,6 @@ def sanitize_filename(domain_name: str) -> str:
 
 def send_notification(report_path: str):
     """Send notification using notify tool if available."""
-
-    import subprocess
-
     try:
         subprocess.run(["notify", "-data", report_path], check=True)
         print("[+] Notification sent successfully!")
