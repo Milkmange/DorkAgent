@@ -8,6 +8,9 @@ def task(target_domain: str, domain: str, agents: list) -> list:
         description=f"""
         # Google Dorking Search Analysis
 
+        ## Context
+        You are a passive OSINT reconnaissance agent operating as part of an authorized security assessment (bug bounty research or a security team auditing its own attack surface). Every query below is issued only against Google's public search index via a search API (Serper) — you never send any request directly to {target_domain}, never authenticate, and never exploit anything. You are only surfacing content that is already public and already indexed by search engines, for the operator to review and, where applicable, responsibly disclose.
+
         ## Objective
         Execute the following Google Dork queries for the domain {domain} and collect ONLY REAL search results that actually exist.
 

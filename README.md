@@ -3,6 +3,10 @@
 
 <img src="banner.gif" alt="banner" width="1000">                   
                                                                                                     
+## Requirements
+- Python 3.11.x (recommended: 3.11.9)
+- Newer versions (e.g. 3.13+) may fail to install `crewai`'s dependencies (such as `tiktoken`) because no prebuilt wheel is published yet for them — pip then tries to build from source and fails without a Rust compiler installed. If you hit a `tiktoken` build error, switch to Python 3.11.x.
+
 ## Usage
 1. Git clone
 ```bash
@@ -60,6 +64,7 @@ def _make_api_request(self, search_query: str, search_type: str) -> dict:
 
 
 ## Update Log
+- **2026-08-24**: Fixed compatibility with crewai 1.15.17 — switched OpenAI to CrewAI's native LLM wrapper (`ChatOpenAI` no longer accepted by `Agent`), added `crewai[anthropic]`/`crewai[google-genai]` extras so Anthropic/Gemini native providers install correctly; added retry-on-invalid-API-key flow instead of exiting; added passive-OSINT context to the searcher task so it doesn't refuse recon on large/well-known domains; documented the Python 3.11.x requirement
 - **2025-12-11**: **DorkAgent v1.4** - Dynamic model selection via API (choose from available models at runtime), added Pydantic models for structured task output validation, improved code quality with CONVENTIONS.md compliance fixes
 - **2025-09-29**: Major code refactoring for improved maintainability (@wjdrud2532 PR #3). Split monolithic 800+ line file into modular architecture (config.py, agents.py, tasks.py, utils.py), fixed dependency auto-installation to work before module imports, added timestamps to report filenames (YYMMDD_HHMMSS format), enforced code conventions with standardized import order and removed all inline comments, maintained 100% backward compatibility with no breaking changes
 - **2025-08-11**: Enhanced security reports with specific information disclosure details, fixed critical notification race condition bug, improved attack vector analysis with actual parameters and payloads, added comprehensive development documentation (CLAUDE.md), restored requirements.txt format

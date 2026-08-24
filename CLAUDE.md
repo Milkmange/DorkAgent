@@ -20,7 +20,7 @@ python dorkagent.py
 The application automatically installs missing dependencies on first run. Manual installation:
 ```bash
 # Python 3.11.9 recommended
-pip install python-dotenv crewai crewai-tools langchain-openai termcolor prompt-toolkit pyfiglet schedule
+pip install python-dotenv crewai crewai-tools "crewai[anthropic]" "crewai[google-genai]" termcolor prompt-toolkit pyfiglet schedule
 ```
 
 ### Environment Setup
@@ -76,9 +76,10 @@ The application follows a sequential workflow pattern coordinated by CrewAI:
 - `select_llm_type()`: Interactive menu returns string identifier
 - `ensure_api_keys()`: Reads/writes `.env`, prompts for missing keys using getpass
 - `create_llm()`: Instantiates provider-specific objects:
-  - OpenAI: ChatOpenAI with `gpt-4.1-mini-2025-04-14`
-  - Anthropic: CrewAI LLM wrapper with `anthropic/claude-3-5-haiku-20241022`
-  - Gemini: CrewAI LLM wrapper with `gemini/gemini-2.5-flash`
+  - OpenAI: CrewAI LLM wrapper with `openai/<selected model>` (requires the `openai` package, installed by default)
+  - Anthropic: CrewAI LLM wrapper with `anthropic/<selected model>` (requires the `anthropic` package, via `crewai[anthropic]`)
+  - Gemini: CrewAI LLM wrapper with `gemini/<selected model>` (requires the `google-genai` package, via `crewai[google-genai]`)
+  - Model choice is not hardcoded: `select_llm()` fetches the live model list from each provider's API and lets the user pick
 
 **Agent Configuration** (agents.py):
 - Three specialized agents: searcher (Google Dorking), bughunter (vulnerability analysis), writer (report generation)

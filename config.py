@@ -1,9 +1,8 @@
-import sys, os, getpass, re
+import os, getpass, re
 
 import requests
 from dotenv import load_dotenv
 from crewai import LLM
-from langchain_openai import ChatOpenAI
 
 ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
 
@@ -71,6 +70,29 @@ def ensure_provider_api_key(provider: str):
         return os.getenv("ANTHROPIC_API_KEY")
     elif provider == "gemini":
         return os.getenv("GEMINI_API_KEY")
+
+def provider_key_name(provider: str) -> str:
+    """Return the .env variable name for a provider's API key."""
+
+    return {
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "gemini": "GEMINI_API_KEY",
+    }[provider]
+
+def prompt_provider_api_key(provider: str) -> str:
+    """Prompt the user to (re-)enter a provider's API key and persist it."""
+
+    key_name = provider_key_name(provider)
+    prompt_text = f"Enter value for {key_name}: "
+    try:
+        val = getpass.getpass(prompt_text)
+    except Exception:
+        val = input(prompt_text)
+    val = val.strip()
+    write_env_file(ENV_PATH, {key_name: val})
+    os.environ[key_name] = val
+    return val
 
 def fetch_models(provider: str, api_key: str):
     """Fetch available models from provider API."""
@@ -182,13 +204,16 @@ def select_llm():
     # Step 2: Ensure API key is available
     api_key = ensure_provider_api_key(provider)
     
-    # Step 3: Fetch available models
-    print(f"\n[+] Fetching available models for {provider.title()}...")
-    models = fetch_models(provider, api_key)
-    
-    if not models:
+    # Step 3: Fetch available models, retrying with a fresh API key on failure
+    while True:
+        print(f"\n[+] Fetching available models for {provider.title()}...")
+        models = fetch_models(provider, api_key)
+
+        if models:
+            break
+
         print(f"[!] Could not fetch models for {provider}. Please check your API key and try again.")
-        sys.exit(1)
+        api_key = prompt_provider_api_key(provider)
     
     # Step 4: Select model
     selected_model = select_model(models)
@@ -199,8 +224,9 @@ def create_llm(provider: str, model: str):
     """Create LLM instance based on provider and model."""
 
     if provider == "openai":
-        return ChatOpenAI(
-            model_name=model,
+        return LLM(
+            api_key=os.getenv('OPENAI_API_KEY'),
+            model=f'openai/{model}',
         )
     elif provider == "anthropic":
         return LLM(
