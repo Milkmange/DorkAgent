@@ -20,13 +20,14 @@ python dorkagent.py
 The application automatically installs missing dependencies on first run. Manual installation:
 ```bash
 # Python 3.11.9 recommended
-pip install python-dotenv crewai crewai-tools "crewai[anthropic]" "crewai[google-genai]" termcolor prompt-toolkit pyfiglet schedule
+pip install python-dotenv crewai crewai-tools "crewai[anthropic]" "crewai[google-genai]" "crewai-tools[serpapi]" termcolor prompt-toolkit pyfiglet schedule
 ```
 
 ### Environment Setup
 Create `.env` file with required API keys:
 ```bash
-SERPER_API_KEY=        # Required - https://serper.dev/
+SERPER_API_KEY=        # Required if using Serper as the search engine - https://serper.dev/
+SERPAPI_API_KEY=       # Required if using SerpApi as the search engine - https://serpapi.com/manage-api-key
 OPENAI_API_KEY=        # Optional - set if using OpenAI
 ANTHROPIC_API_KEY=     # Optional - set if using Anthropic
 GEMINI_API_KEY=        # Optional - set if using Gemini (recommended for free usage)
@@ -59,7 +60,7 @@ The application follows a sequential workflow pattern coordinated by CrewAI:
    - `integrate_notify()`: Optional notify tool integration (utils.py:61-72)
 
 3. **Execution Phase** (dorkagent.py:125-160)
-   - **Task 1** (tasks.py:6-120): `searcher` agent executes 30 Google Dork queries via SerperDevTool
+   - **Task 1** (tasks.py:6-120): `searcher` agent executes 30 Google Dork queries via the selected search tool (SerperDevTool or SerpApiGoogleSearchTool)
    - **Task 2** (tasks.py:122-236): `bughunter` agent analyzes URLs for vulnerabilities via ScrapeWebsiteTool
    - **Task 3** (tasks.py:238-471): `writer` agent generates structured markdown security report
    - Reports saved to `./log/YYMMDD/YYMMDD_HHMMSS_domain.md`
@@ -81,10 +82,15 @@ The application follows a sequential workflow pattern coordinated by CrewAI:
   - Gemini: CrewAI LLM wrapper with `gemini/<selected model>` (requires the `google-genai` package, via `crewai[google-genai]`)
   - Model choice is not hardcoded: `select_llm()` fetches the live model list from each provider's API and lets the user pick
 
+**Search Engine Configuration** (config.py):
+- `select_search_engine()`: Interactive menu returns `"serper"` or `"serpapi"`
+- `ensure_search_engine_api_key()`: Prompts for and persists the selected engine's key (`SERPER_API_KEY` or `SERPAPI_API_KEY`) if missing
+- `agents(llm, search_engine)` (agents.py) picks `SerperDevTool` or `SerpApiGoogleSearchTool` accordingly, default `"serper"`
+
 **Agent Configuration** (agents.py):
 - Three specialized agents: searcher (Google Dorking), bughunter (vulnerability analysis), writer (report generation)
 - All agents share same LLM instance passed from main
-- Tools: SerperDevTool for searches, ScrapeWebsiteTool for content analysis
+- Tools: SerperDevTool or SerpApiGoogleSearchTool (user-selected search engine) for searches, ScrapeWebsiteTool for content analysis
 - No agent delegation (each operates independently)
 
 **Google Dork Query Structure** (tasks.py:6-120):
@@ -109,10 +115,10 @@ The application follows a sequential workflow pattern coordinated by CrewAI:
 - `output_log_file=True`: Automatic logging
 - Sequential task execution (no parallel processing)
 
-**SerperDevTool Customization**:
-- Default 10 results per query (modifiable in site-packages/crewai_tools/tools/serper_dev_tool/)
-- Time range filter: `tbs: "qdr:m"` for past month results
-- Requires SERPER_API_KEY from serper.dev
+**Search Tool Customization**:
+- Search engine (Serper vs SerpApi) is chosen interactively at startup via `select_search_engine()`; not hardcoded
+- Serper: Default 10 results per query, `tbs: "qdr:m"` time filter (modifiable in site-packages/crewai_tools/tools/serper_dev_tool/); requires SERPER_API_KEY from serper.dev
+- SerpApi: Only forwards `q`/`location` by default; `num`/`tbs` need manual edits in site-packages/crewai_tools/tools/serpapi_tool/; requires SERPAPI_API_KEY from serpapi.com
 
 **Report Generation**:
 - Timestamped filenames: `YYMMDD_HHMMSS_domain.md` (dorkagent.py:152-153)

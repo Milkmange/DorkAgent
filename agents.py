@@ -1,15 +1,17 @@
 from crewai import Agent
-from crewai_tools import SerperDevTool, ScrapeWebsiteTool, FileWriterTool
+from crewai_tools import SerperDevTool, SerpApiGoogleSearchTool, ScrapeWebsiteTool, FileWriterTool
 
-def agents(llm) -> list:
+def agents(llm, search_engine: str = "serper") -> list:
     """Create and configure CrewAI agents."""
+
+    search_tool = SerpApiGoogleSearchTool() if search_engine == "serpapi" else SerperDevTool()
 
     searcher = Agent(
         role="searcher",
         goal="Performing advanced Google searches using Google Dorks",
         backstory="An expert in Google Dorking techniques for information gathering",
         verbose=True,
-        tools=[SerperDevTool()],
+        tools=[search_tool],
         llm=llm,
     )
 

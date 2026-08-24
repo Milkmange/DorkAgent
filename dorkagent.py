@@ -7,6 +7,7 @@ REQUIRED_PACKAGES = {
     "crewai-tools": "crewai_tools",
     "crewai[anthropic]": "anthropic",
     "crewai[google-genai]": "google.genai",
+    "crewai-tools[serpapi]": "serpapi",
     "termcolor": "termcolor",
     "prompt-toolkit": "prompt_toolkit",
     "pyfiglet": "pyfiglet",
@@ -54,7 +55,9 @@ if THIRD_PARTY_IMPORT_ERROR:
 
 from config import (
     select_llm,
-    create_llm
+    create_llm,
+    select_search_engine,
+    ensure_search_engine_api_key
 )
 
 import pyfiglet
@@ -100,7 +103,10 @@ if __name__ == "__main__":
     provider, model = select_llm()
     llm = create_llm(provider, model)
 
-    agent_list = create_agents(llm)
+    search_engine = select_search_engine()
+    ensure_search_engine_api_key(search_engine)
+
+    agent_list = create_agents(llm, search_engine)
 
     clear_terminal()
     display_banner()

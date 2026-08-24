@@ -39,8 +39,8 @@ def write_env_file(path: str, values: dict):
 def ensure_provider_api_key(provider: str):
     """Ensure provider-specific API key is available."""
     
-    required_keys = ["SERPER_API_KEY"]
-    
+    required_keys = []
+
     if provider == "openai":
         required_keys.append("OPENAI_API_KEY")
     elif provider == "anthropic":
@@ -80,10 +80,9 @@ def provider_key_name(provider: str) -> str:
         "gemini": "GEMINI_API_KEY",
     }[provider]
 
-def prompt_provider_api_key(provider: str) -> str:
-    """Prompt the user to (re-)enter a provider's API key and persist it."""
+def prompt_and_persist_key(key_name: str) -> str:
+    """Prompt the user for a value and persist it to .env."""
 
-    key_name = provider_key_name(provider)
     prompt_text = f"Enter value for {key_name}: "
     try:
         val = getpass.getpass(prompt_text)
@@ -93,6 +92,45 @@ def prompt_provider_api_key(provider: str) -> str:
     write_env_file(ENV_PATH, {key_name: val})
     os.environ[key_name] = val
     return val
+
+def prompt_provider_api_key(provider: str) -> str:
+    """Prompt the user to (re-)enter a provider's API key and persist it."""
+
+    return prompt_and_persist_key(provider_key_name(provider))
+
+SEARCH_ENGINE_KEY_NAMES = {
+    "serper": "SERPER_API_KEY",
+    "serpapi": "SERPAPI_API_KEY",
+}
+
+def select_search_engine():
+    """Select Google Dorking search engine."""
+
+    while True:
+        print("\n")
+        print("1. Serper (serper.dev)")
+        print("2. SerpApi (serpapi.com)")
+        print("\n")
+
+        choice = input("[?] Choose Search Engine (1 - 2): ").strip()
+
+        if choice == "1":
+            return "serper"
+        elif choice == "2":
+            return "serpapi"
+        else:
+            print("[!] Invalid choice. Please enter 1 - 2.")
+
+def ensure_search_engine_api_key(engine: str) -> str:
+    """Ensure the selected search engine's API key is available."""
+
+    key_name = SEARCH_ENGINE_KEY_NAMES[engine]
+
+    if not os.getenv(key_name):
+        print(f"[!] Missing required API key: {key_name}")
+        prompt_and_persist_key(key_name)
+
+    return os.getenv(key_name)
 
 def fetch_models(provider: str, api_key: str):
     """Fetch available models from provider API."""
